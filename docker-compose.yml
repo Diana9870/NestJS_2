@@ -1,0 +1,23 @@
+# PostgreSQL for local development. Values come from the .env file in this
+# folder (copy .env.example to .env first): `docker compose up -d`.
+services:
+  postgres:
+    image: postgres:16
+    container_name: cinema-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME is not set, copy .env.example to .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is not set, copy .env.example to .env}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is not set, copy .env.example to .env}
+    ports:
+      - "5434:5432"
+    volumes:
+      - cinema_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  cinema_pgdata:

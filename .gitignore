@@ -1,0 +1,27 @@
+# compiled output
+/dist
+/node_modules
+/build
+*.tsbuildinfo
+
+# logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+
+# IDE
+/.idea
+/.vscode/*
+!/.vscode/extensions.json
+
+# environment (the example file is committed, the real one is not)
+.env
+.env.*
+!.env.example
+node_modules

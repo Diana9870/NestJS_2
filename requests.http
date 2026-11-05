@@ -1,0 +1,581 @@
+# Cinema API: run the requests top to bottom (VS Code, extension "REST Client").
+# Before the first run: docker compose up -d, npm run migration:run, npm run start:dev.
+# Ids come from the responses of earlier requests ({{name.response.body.id}}).
+# Showings are dated in 2099 so they are always "in the future".
+# Hall names are randomised, so the file can be run again. The data stays in the
+# database between runs, so lists and "total" in the comments below are exact for
+# the first run on a database without earlier runs (the seed data is not counted
+# where a request filters by the film or the date 2099-01-01).
+
+@baseUrl = http://localhost:3000
+@json = application/json
+# Valid UUID v4 that no record has: gives 404 / "not found" errors
+@missingId = 00000000-0000-4000-8000-000000000000
+
+
+###############################################################################
+# FILMS
+###############################################################################
+
+### POST /films -> 201
+# @name createFilm
+POST {{baseUrl}}/films
+Content-Type: {{json}}
+
+{
+  "title": "Dune: Part Two",
+  "durationMinutes": 166,
+  "releaseYear": 2024
+}
+
+### POST /films (second film, deleted at the end) -> 201
+# @name createFilm2
+POST {{baseUrl}}/films
+Content-Type: {{json}}
+
+{
+  "title": "Temporary Film",
+  "durationMinutes": 90,
+  "releaseYear": 2020
+}
+
+### POST /films, fields missing -> 400
+POST {{baseUrl}}/films
+Content-Type: {{json}}
+
+{
+  "title": "No duration and year"
+}
+
+### POST /films, wrong type (durationMinutes is a string) -> 400
+POST {{baseUrl}}/films
+Content-Type: {{json}}
+
+{
+  "title": "Wrong type",
+  "durationMinutes": "166",
+  "releaseYear": 2024
+}
+
+### GET /films -> 200
+GET {{baseUrl}}/films
+
+### GET /films/:id -> 200
+GET {{baseUrl}}/films/{{createFilm.response.body.id}}
+
+### GET /films/:id, unknown id -> 404
+GET {{baseUrl}}/films/{{missingId}}
+
+### GET /films/:id, id is not a UUID -> 404
+GET {{baseUrl}}/films/not-a-uuid
+
+### PATCH /films/:id, subset of fields -> 200
+PATCH {{baseUrl}}/films/{{createFilm.response.body.id}}
+Content-Type: {{json}}
+
+{
+  "durationMinutes": 167
+}
+
+### PATCH /films/:id, wrong type -> 400
+PATCH {{baseUrl}}/films/{{createFilm.response.body.id}}
+Content-Type: {{json}}
+
+{
+  "releaseYear": "2024"
+}
+
+### PATCH /films/:id, unknown id -> 404
+PATCH {{baseUrl}}/films/{{missingId}}
+Content-Type: {{json}}
+
+{
+  "title": "Does not matter"
+}
+
+
+###############################################################################
+# HALLS
+###############################################################################
+
+### POST /halls (3 rows x 5 seats = 15 seats) -> 201
+# @name createHall
+POST {{baseUrl}}/halls
+Content-Type: {{json}}
+
+{
+  "name": "Hall {{$randomInt 1000 999999}}",
+  "rows": 3,
+  "seatsPerRow": 5
+}
+
+### POST /halls (second hall, deleted at the end) -> 201
+# @name createHall2
+POST {{baseUrl}}/halls
+Content-Type: {{json}}
+
+{
+  "name": "Temporary Hall {{$randomInt 1000 999999}}",
+  "rows": 1,
+  "seatsPerRow": 1
+}
+
+### POST /halls, field missing -> 400
+POST {{baseUrl}}/halls
+Content-Type: {{json}}
+
+{
+  "name": "Incomplete hall",
+  "rows": 3
+}
+
+### POST /halls, wrong type (rows is a string) -> 400
+POST {{baseUrl}}/halls
+Content-Type: {{json}}
+
+{
+  "name": "Wrong type hall",
+  "rows": "3",
+  "seatsPerRow": 5
+}
+
+### POST /halls, rows is not a positive integer (0) -> 400
+POST {{baseUrl}}/halls
+Content-Type: {{json}}
+
+{
+  "name": "Zero rows hall",
+  "rows": 0,
+  "seatsPerRow": 5
+}
+
+### POST /halls, seatsPerRow is not an integer (4.5) -> 400
+POST {{baseUrl}}/halls
+Content-Type: {{json}}
+
+{
+  "name": "Fractional hall",
+  "rows": 3,
+  "seatsPerRow": 4.5
+}
+
+### POST /halls, name already taken -> 409
+POST {{baseUrl}}/halls
+Content-Type: {{json}}
+
+{
+  "name": "{{createHall.response.body.name}}",
+  "rows": 2,
+  "seatsPerRow": 2
+}
+
+### GET /halls -> 200
+GET {{baseUrl}}/halls
+
+### GET /halls/:id, with the seats array (15 items) -> 200
+GET {{baseUrl}}/halls/{{createHall.response.body.id}}
+
+### GET /halls/:id, unknown id -> 404
+GET {{baseUrl}}/halls/{{missingId}}
+
+
+###############################################################################
+# SHOWINGS
+###############################################################################
+
+### POST /showings, evening showing -> 201
+# @name createShowing
+POST {{baseUrl}}/showings
+Content-Type: {{json}}
+
+{
+  "filmId": "{{createFilm.response.body.id}}",
+  "hallId": "{{createHall.response.body.id}}",
+  "startsAt": "2099-01-01T18:00:00Z",
+  "price": 12500
+}
+
+### POST /showings, morning showing, cheaper -> 201
+# @name createShowingMorning
+POST {{baseUrl}}/showings
+Content-Type: {{json}}
+
+{
+  "filmId": "{{createFilm.response.body.id}}",
+  "hallId": "{{createHall.response.body.id}}",
+  "startsAt": "2099-01-01T10:00:00Z",
+  "price": 8000
+}
+
+### POST /showings, next day -> 201
+# @name createShowingNextDay
+POST {{baseUrl}}/showings
+Content-Type: {{json}}
+
+{
+  "filmId": "{{createFilm.response.body.id}}",
+  "hallId": "{{createHall.response.body.id}}",
+  "startsAt": "2099-01-02T12:00:00Z",
+  "price": 10000
+}
+
+### POST /showings, same start time as the first one (tie is ordered by id) -> 201
+# @name createShowingSameTime
+POST {{baseUrl}}/showings
+Content-Type: {{json}}
+
+{
+  "filmId": "{{createFilm.response.body.id}}",
+  "hallId": "{{createHall.response.body.id}}",
+  "startsAt": "2099-01-01T18:00:00Z",
+  "price": 12500
+}
+
+### POST /showings, film does not exist -> 400
+POST {{baseUrl}}/showings
+Content-Type: {{json}}
+
+{
+  "filmId": "{{missingId}}",
+  "hallId": "{{createHall.response.body.id}}",
+  "startsAt": "2099-01-01T18:00:00Z",
+  "price": 12500
+}
+
+### POST /showings, hall does not exist -> 400
+POST {{baseUrl}}/showings
+Content-Type: {{json}}
+
+{
+  "filmId": "{{createFilm.response.body.id}}",
+  "hallId": "{{missingId}}",
+  "startsAt": "2099-01-01T18:00:00Z",
+  "price": 12500
+}
+
+### POST /showings, startsAt is not an ISO 8601 date -> 400
+POST {{baseUrl}}/showings
+Content-Type: {{json}}
+
+{
+  "filmId": "{{createFilm.response.body.id}}",
+  "hallId": "{{createHall.response.body.id}}",
+  "startsAt": "tomorrow evening",
+  "price": 12500
+}
+
+### POST /showings, startsAt is in the past -> 400
+POST {{baseUrl}}/showings
+Content-Type: {{json}}
+
+{
+  "filmId": "{{createFilm.response.body.id}}",
+  "hallId": "{{createHall.response.body.id}}",
+  "startsAt": "2020-01-01T18:00:00Z",
+  "price": 12500
+}
+
+### POST /showings, price is not an integer (125.5) -> 400
+POST {{baseUrl}}/showings
+Content-Type: {{json}}
+
+{
+  "filmId": "{{createFilm.response.body.id}}",
+  "hallId": "{{createHall.response.body.id}}",
+  "startsAt": "2099-01-01T18:00:00Z",
+  "price": 125.5
+}
+
+### POST /showings, price is not positive (0) -> 400
+POST {{baseUrl}}/showings
+Content-Type: {{json}}
+
+{
+  "filmId": "{{createFilm.response.body.id}}",
+  "hallId": "{{createHall.response.body.id}}",
+  "startsAt": "2099-01-01T18:00:00Z",
+  "price": 0
+}
+
+### POST /showings, field missing (no price) -> 400
+POST {{baseUrl}}/showings
+Content-Type: {{json}}
+
+{
+  "filmId": "{{createFilm.response.body.id}}",
+  "hallId": "{{createHall.response.body.id}}",
+  "startsAt": "2099-01-01T18:00:00Z"
+}
+
+### GET /showings, first page with the defaults (page=1, limit=20, sort=asc) -> 200
+# Body: { items: [...], total, page, limit }. items are ordered by start time, then id.
+GET {{baseUrl}}/showings
+
+### GET /showings?filmId=... -> 200
+GET {{baseUrl}}/showings?filmId={{createFilm.response.body.id}}
+
+### GET /showings?date=2099-01-01 (three showings, not the next-day one) -> 200
+GET {{baseUrl}}/showings?date=2099-01-01
+
+### GET /showings?filmId=...&date=2099-01-02 (both filters, one showing) -> 200
+GET {{baseUrl}}/showings?filmId={{createFilm.response.body.id}}&date=2099-01-02
+
+### GET /showings?filmId=<other film> (nothing matches) -> 200, []
+GET {{baseUrl}}/showings?filmId={{createFilm2.response.body.id}}
+
+### GET /showings?date=2099-01-01&limit=2&page=1 (3 showings that day: first 2, total = 3) -> 200
+GET {{baseUrl}}/showings?date=2099-01-01&limit=2&page=1
+
+### GET /showings?date=2099-01-01&limit=2&page=2 (the remaining one, total = 3) -> 200
+GET {{baseUrl}}/showings?date=2099-01-01&limit=2&page=2
+
+### GET /showings?date=2099-01-01&limit=2&page=3 (past the end: items = [], total = 3) -> 200
+GET {{baseUrl}}/showings?date=2099-01-01&limit=2&page=3
+
+### GET /showings?date=2099-01-01&sort=desc (latest first) -> 200
+GET {{baseUrl}}/showings?date=2099-01-01&sort=desc
+
+### GET /showings?filmId=...&sort=desc&limit=1&page=2 (filter + sort + paging together) -> 200
+GET {{baseUrl}}/showings?filmId={{createFilm.response.body.id}}&sort=desc&limit=1&page=2
+
+### GET /showings?page=0 (page starts at 1) -> 400
+GET {{baseUrl}}/showings?page=0
+
+### GET /showings?page=abc (not an integer) -> 400
+GET {{baseUrl}}/showings?page=abc
+
+### GET /showings?limit=0 (limit is from 1 to 100) -> 400
+GET {{baseUrl}}/showings?limit=0
+
+### GET /showings?limit=101 (limit is from 1 to 100) -> 400
+GET {{baseUrl}}/showings?limit=101
+
+### GET /showings?limit=2.5 (not an integer) -> 400
+GET {{baseUrl}}/showings?limit=2.5
+
+### GET /showings?sort=up (only asc or desc) -> 400
+GET {{baseUrl}}/showings?sort=up
+
+### GET /showings?date=01.01.2099 (wrong format) -> 400
+GET {{baseUrl}}/showings?date=01.01.2099
+
+### GET /showings?date=2099-13-45 (not a calendar date) -> 400
+GET {{baseUrl}}/showings?date=2099-13-45
+
+### GET /showings/:id -> 200
+GET {{baseUrl}}/showings/{{createShowing.response.body.id}}
+
+### GET /showings/:id, unknown id -> 404
+GET {{baseUrl}}/showings/{{missingId}}
+
+### GET /showings/:id/seats, nothing booked yet (15 seats, all isBooked=false) -> 200
+GET {{baseUrl}}/showings/{{createShowing.response.body.id}}/seats
+
+### GET /showings/:id/seats, unknown id -> 404
+GET {{baseUrl}}/showings/{{missingId}}/seats
+
+
+###############################################################################
+# BOOKINGS
+###############################################################################
+
+### GET /bookings, nothing booked by this file yet -> 200 (the seed booking, if the database was seeded, is listed)
+GET {{baseUrl}}/bookings
+
+### POST /showings/:id/bookings, two seats (totalPrice = 2 x 12500 = 25000) -> 201
+# @name createBooking
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: {{json}}
+
+{
+  "seats": [
+    { "row": 1, "seat": 1 },
+    { "row": 1, "seat": 2 }
+  ]
+}
+
+### GET /showings/:id/seats, (1,1) and (1,2) are booked now -> 200
+GET {{baseUrl}}/showings/{{createShowing.response.body.id}}/seats
+
+### POST /showings/:id/bookings, one seat is taken (1,2) -> 409, nothing is booked
+# The booking and its seats are written in one transaction: (3,5) is rolled back
+# together with the booking. The unique index on (showing_id, row, seat) rejects (1,2).
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: {{json}}
+
+{
+  "seats": [
+    { "row": 3, "seat": 5 },
+    { "row": 1, "seat": 2 }
+  ]
+}
+
+### GET /showings/:id/seats, (3,5) must still be free (no partial booking) -> 200
+GET {{baseUrl}}/showings/{{createShowing.response.body.id}}/seats
+
+### POST /showings/:id/bookings, same seat on another showing is free -> 201
+# @name createBookingMorning
+POST {{baseUrl}}/showings/{{createShowingMorning.response.body.id}}/bookings
+Content-Type: {{json}}
+
+{
+  "seats": [
+    { "row": 1, "seat": 1 }
+  ]
+}
+
+### POST /showings/:id/bookings, unknown showing -> 404
+POST {{baseUrl}}/showings/{{missingId}}/bookings
+Content-Type: {{json}}
+
+{
+  "seats": [
+    { "row": 1, "seat": 1 }
+  ]
+}
+
+### POST /showings/:id/bookings, seats is empty -> 400
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: {{json}}
+
+{
+  "seats": []
+}
+
+### POST /showings/:id/bookings, seats is missing -> 400
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: {{json}}
+
+{}
+
+### POST /showings/:id/bookings, item without seat -> 400
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: {{json}}
+
+{
+  "seats": [
+    { "row": 2 }
+  ]
+}
+
+### POST /showings/:id/bookings, the same seat twice -> 400
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: {{json}}
+
+{
+  "seats": [
+    { "row": 2, "seat": 3 },
+    { "row": 2, "seat": 3 }
+  ]
+}
+
+### POST /showings/:id/bookings, row beyond the hall (hall has 3 rows) -> 400
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: {{json}}
+
+{
+  "seats": [
+    { "row": 4, "seat": 1 }
+  ]
+}
+
+### POST /showings/:id/bookings, seat beyond the row (5 seats per row) -> 400
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: {{json}}
+
+{
+  "seats": [
+    { "row": 1, "seat": 6 }
+  ]
+}
+
+### POST /showings/:id/bookings, row is 0 -> 400
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: {{json}}
+
+{
+  "seats": [
+    { "row": 0, "seat": 1 }
+  ]
+}
+
+### POST /showings/:id/bookings, seat is negative -> 400
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: {{json}}
+
+{
+  "seats": [
+    { "row": 1, "seat": -1 }
+  ]
+}
+
+### POST /showings/:id/bookings, seat is not an integer -> 400
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: {{json}}
+
+{
+  "seats": [
+    { "row": 1, "seat": 1.5 }
+  ]
+}
+
+### GET /bookings, all bookings of the service (the 2 made above, plus older ones if any) -> 200
+GET {{baseUrl}}/bookings
+
+### GET /showings/:id/bookings -> 200 (only the booking of this showing)
+GET {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+
+### GET /showings/:id/bookings, unknown showing -> 404
+GET {{baseUrl}}/showings/{{missingId}}/bookings
+
+### DELETE /bookings/:id, cancels the first booking (its seats are deleted with it) -> 204
+DELETE {{baseUrl}}/bookings/{{createBooking.response.body.id}}
+
+### DELETE /bookings/:id, already cancelled -> 404
+DELETE {{baseUrl}}/bookings/{{createBooking.response.body.id}}
+
+### DELETE /bookings/:id, unknown id -> 404
+DELETE {{baseUrl}}/bookings/{{missingId}}
+
+### GET /showings/:id/seats, (1,1) and (1,2) are free again -> 200
+GET {{baseUrl}}/showings/{{createShowing.response.body.id}}/seats
+
+### POST /showings/:id/bookings, the freed seats can be booked again -> 201
+POST {{baseUrl}}/showings/{{createShowing.response.body.id}}/bookings
+Content-Type: {{json}}
+
+{
+  "seats": [
+    { "row": 1, "seat": 1 },
+    { "row": 1, "seat": 2 }
+  ]
+}
+
+
+###############################################################################
+# DELETING FILMS AND HALLS
+###############################################################################
+
+### DELETE /films/:id, film is used by showings -> 409 (showings are not deleted with it)
+DELETE {{baseUrl}}/films/{{createFilm.response.body.id}}
+
+### DELETE /halls/:id, hall is used by showings -> 409 (showings are not deleted with it)
+DELETE {{baseUrl}}/halls/{{createHall.response.body.id}}
+
+### DELETE /films/:id, film without showings -> 204
+DELETE {{baseUrl}}/films/{{createFilm2.response.body.id}}
+
+### GET /films/:id, the deleted film is gone -> 404
+GET {{baseUrl}}/films/{{createFilm2.response.body.id}}
+
+### DELETE /films/:id, unknown id -> 404
+DELETE {{baseUrl}}/films/{{missingId}}
+
+### DELETE /halls/:id, hall without showings -> 204
+DELETE {{baseUrl}}/halls/{{createHall2.response.body.id}}
+
+### GET /halls/:id, the deleted hall is gone -> 404
+GET {{baseUrl}}/halls/{{createHall2.response.body.id}}
+
+### DELETE /halls/:id, unknown id -> 404
+DELETE {{baseUrl}}/halls/{{missingId}}
